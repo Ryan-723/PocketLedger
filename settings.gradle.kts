@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "PocketLedger"
 include(":app")
- 
+include(":app:pocketledgerwear")

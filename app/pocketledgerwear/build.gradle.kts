@@ -3,17 +3,16 @@ plugins {
 }
 
 android {
-    namespace = "com.example.pocketledger"
+    namespace = "com.example.pocketledgerwear"
     compileSdk = 34
 
     defaultConfig {
         applicationId = "com.example.pocketledger"
-        minSdk = 24
+        minSdk = 30
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -36,14 +35,9 @@ android {
 
 dependencies {
 
+    implementation("com.google.android.gms:play-services-wearable:18.2.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-    implementation("com.google.android.gms:play-services-wearable:18.1.0")
-    implementation("androidx.room:room-common:2.6.1")
-    implementation("androidx.room:room-runtime:2.6.1")
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-    annotationProcessor("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.wear:wear:1.3.0")
 }

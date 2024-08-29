@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dimensions for BoxInsetLayout padding -->
+    <dimen name="box_inset_layout_padding">16dp</dimen>
+
+    <!-- Dimensions for inner LinearLayout padding -->
+    <dimen name="inner_frame_layout_padding">8dp</dimen>
+
+    <!-- Dimensions for general padding/margin used in the layout -->
+    <dimen name="general_padding">8dp</dimen>
+</resources>
