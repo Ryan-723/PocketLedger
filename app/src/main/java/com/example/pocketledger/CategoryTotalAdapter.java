@@ -10,7 +10,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.List;
 
-// Adapter for displaying category totals in a RecyclerView
 public class CategoryTotalAdapter extends RecyclerView.Adapter<CategoryTotalAdapter.ViewHolder> {
     private List<CategoryTotal> categoryTotals;
 
@@ -37,7 +36,6 @@ public class CategoryTotalAdapter extends RecyclerView.Adapter<CategoryTotalAdap
         return categoryTotals.size();
     }
 
-    // ViewHolder class to hold references to the views for each item
     static class ViewHolder extends RecyclerView.ViewHolder {
         TextView categoryNameTextView;
         TextView categoryTotalTextView;
