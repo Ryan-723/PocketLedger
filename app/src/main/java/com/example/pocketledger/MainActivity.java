@@ -19,14 +19,20 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.gms.tasks.Task;
 import com.google.android.gms.wearable.DataClient;
 import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
 import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataMap;
 import com.google.android.gms.wearable.DataMapItem;
+import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.PutDataMapRequest;
+import com.google.android.gms.wearable.PutDataRequest;
 import com.google.android.gms.wearable.Wearable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements DataClient.OnDataChangedListener {
@@ -64,6 +70,7 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
         loadCategoryTotals();
         setupCategorySpinner();
         initializeDefaultCategories();
+        checkWearConnection();
 
         // Register the BroadcastReceiver
         LocalBroadcastManager.getInstance(this).registerReceiver(dataClearedReceiver,
@@ -147,31 +154,51 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
         }).start();
     }
 
-    private void setupCategorySpinner() {
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, categories);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        categorySpinner.setAdapter(adapter);
-    }
 
     private void initializeDefaultCategories() {
         new Thread(() -> {
             AppDatabase db = AppDatabase.getInstance(this);
             List<String> existingCategories = db.categoryDao().getAllCategories();
-            if (existingCategories.isEmpty()) {
-                String[] defaultCategories = {"Food", "Transportation", "Entertainment", "Utilities"};
-                for (String category : defaultCategories) {
-                    db.categoryDao().insert(new Category(category));
-                }
-                Log.d(TAG, "Default categories initialized");
-            }
             categories.clear();
-            categories.addAll(db.categoryDao().getAllCategories());
+            categories.addAll(existingCategories);
             runOnUiThread(this::setupCategorySpinner);
         }).start();
     }
 
+    private void setupCategorySpinner() {
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, categories);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        categorySpinner.setAdapter(adapter);
+
+        if (categories.isEmpty()) {
+            categorySpinner.setEnabled(false);
+            // Optionally, you can set a hint or a placeholder text
+            categorySpinner.setPrompt("No categories available");
+        } else {
+            categorySpinner.setEnabled(true);
+        }
+    }
+
     private void sendCategoriesToWear() {
-        // Implementation for sending categories to wear device
+        new Thread(() -> {
+            AppDatabase db = AppDatabase.getInstance(this);
+            List<String> updatedCategories = db.categoryDao().getAllCategories();
+
+            PutDataMapRequest putDataMapReq = PutDataMapRequest.create("/categories");
+            putDataMapReq.getDataMap().putStringArray("categories", updatedCategories.toArray(new String[0]));
+            PutDataRequest putDataReq = putDataMapReq.asPutDataRequest();
+            putDataReq.setUrgent();
+
+            Task<DataItem> putDataTask = Wearable.getDataClient(this).putDataItem(putDataReq);
+
+            putDataTask.addOnSuccessListener(dataItem -> {
+                Log.d(TAG, "Categories sent successfully to Wear: " + updatedCategories);
+            });
+
+            putDataTask.addOnFailureListener(exception -> {
+                Log.e(TAG, "Sending categories to Wear failed: " + exception);
+            });
+        }).start();
     }
 
     @Override
@@ -191,15 +218,34 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
         for (DataEvent event : dataEvents) {
             if (event.getType() == DataEvent.TYPE_CHANGED) {
                 DataItem item = event.getDataItem();
-                if (item.getUri().getPath().equals("/expense")) {
+                if (item.getUri().getPath().equals("/categories")) {
                     DataMapItem dataMapItem = DataMapItem.fromDataItem(item);
-                    double amount = dataMapItem.getDataMap().getDouble("amount");
-                    String category = dataMapItem.getDataMap().getString("category");
-                    long timestamp = dataMapItem.getDataMap().getLong("timestamp");
+                    String[] newCategories = dataMapItem.getDataMap().getStringArray("categories");
+                    if (newCategories != null) {
+                        updateCategories(newCategories);
+                    }
+                }
+            }
+        }
+        for (DataEvent event : dataEvents) {
+            if (event.getType() == DataEvent.TYPE_CHANGED) {
+                DataItem item = event.getDataItem();
+                if (item.getUri().getPath().equals("/expense")) {
+                    DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
+                    double amount = dataMap.getDouble("amount");
+                    String category = dataMap.getString("category");
+                    long timestamp = dataMap.getLong("timestamp");
+                    Log.d(TAG, "Received expense from Wear: Amount=" + amount + ", Category=" + category + ", Timestamp=" + timestamp);
                     processExpense(amount, category, timestamp);
                 }
             }
         }
+    }
+
+    private void updateCategories(String[] newCategories) {
+        categories.clear();
+        categories.addAll(Arrays.asList(newCategories));
+        runOnUiThread(this::setupCategorySpinner);
     }
 
     private void processExpense(double amount, String category, long timestamp) {
@@ -211,6 +257,7 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
                 expenseAdapter.notifyItemInserted(0);
                 expensesRecyclerView.scrollToPosition(0);
                 loadCategoryTotals();
+                Log.d(TAG, "Expense processed and added to the list: " + expense);
             });
         }).start();
     }
@@ -229,5 +276,19 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    private void checkWearConnection() {
+        Wearable.getNodeClient(this).getConnectedNodes()
+                .addOnSuccessListener(nodes -> {
+                    if (!nodes.isEmpty()) {
+                        for (Node node : nodes) {
+                            Log.d(TAG, "Connected to Wear device: " + node.getDisplayName() + " (ID: " + node.getId() + ")");
+                        }
+                    } else {
+                        Log.w(TAG, "No Wear devices connected");
+                    }
+                })
+                .addOnFailureListener(e -> Log.e(TAG, "Failed to get connected nodes", e));
     }
 }

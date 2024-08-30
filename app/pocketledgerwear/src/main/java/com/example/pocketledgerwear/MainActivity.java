@@ -10,11 +10,13 @@ import android.widget.Toast;
 
 import androidx.fragment.app.FragmentActivity;
 
+import com.google.android.gms.tasks.Task;
 import com.google.android.gms.wearable.DataClient;
 import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
 import com.google.android.gms.wearable.DataItem;
 import com.google.android.gms.wearable.DataMapItem;
+import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.PutDataMapRequest;
 import com.google.android.gms.wearable.PutDataRequest;
 import com.google.android.gms.wearable.Wearable;
@@ -42,6 +44,8 @@ public class MainActivity extends FragmentActivity implements DataClient.OnDataC
 
         setupCategorySpinner();
         setupSaveButton();
+        requestCategoriesFromPhone();
+        checkPhoneConnection();
     }
 
     @Override
@@ -56,21 +60,20 @@ public class MainActivity extends FragmentActivity implements DataClient.OnDataC
         Wearable.getDataClient(this).removeListener(this);
     }
 
-    private void setupCategorySpinner() {
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, categories);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        categorySpinner.setAdapter(adapter);
-    }
 
     private void setupSaveButton() {
         saveButton.setOnClickListener(v -> {
             String amountStr = amountInput.getText().toString();
             if (!amountStr.isEmpty()) {
-                double amount = Double.parseDouble(amountStr);
-                String category = (String) categorySpinner.getSelectedItem();
-                long timestamp = System.currentTimeMillis();
-                sendExpenseToPhone(amount, category, timestamp);
-                resetForm();
+                if (categories.isEmpty()) {
+                    showToast("No categories available. Cannot save expense.");
+                } else {
+                    double amount = Double.parseDouble(amountStr);
+                    String category = (String) categorySpinner.getSelectedItem();
+                    long timestamp = System.currentTimeMillis();
+                    sendExpenseToPhone(amount, category, timestamp);
+                    resetForm();
+                }
             } else {
                 showToast("Please enter a valid amount");
             }
@@ -85,15 +88,15 @@ public class MainActivity extends FragmentActivity implements DataClient.OnDataC
         PutDataRequest putDataReq = putDataMapReq.asPutDataRequest();
         putDataReq.setUrgent();
 
-        Wearable.getDataClient(this).putDataItem(putDataReq)
-                .addOnSuccessListener(dataItem -> {
-                    Log.d(TAG, "Expense sent successfully");
-                    showToast("Expense saved");
-                })
-                .addOnFailureListener(e -> {
-                    Log.e(TAG, "Failed to send expense", e);
-                    showToast("Failed to save expense");
-                });
+        Task<DataItem> putDataTask = Wearable.getDataClient(this).putDataItem(putDataReq);
+        putDataTask.addOnSuccessListener(dataItem -> {
+            Log.d(TAG, "Expense sent successfully: Amount=" + amount + ", Category=" + category + ", Timestamp=" + timestamp);
+            showToast("Expense saved");
+        });
+        putDataTask.addOnFailureListener(e -> {
+            Log.e(TAG, "Failed to send expense", e);
+            showToast("Failed to save expense");
+        });
     }
 
     private void resetForm() {
@@ -114,7 +117,7 @@ public class MainActivity extends FragmentActivity implements DataClient.OnDataC
                     DataMapItem dataMapItem = DataMapItem.fromDataItem(item);
                     String[] newCategories = dataMapItem.getDataMap().getStringArray("categories");
                     if (newCategories != null) {
-                        updateCategories(newCategories);
+                        runOnUiThread(() -> updateCategories(newCategories));
                     }
                 }
             }
@@ -124,6 +127,51 @@ public class MainActivity extends FragmentActivity implements DataClient.OnDataC
     private void updateCategories(String[] newCategories) {
         categories.clear();
         categories.addAll(Arrays.asList(newCategories));
-        runOnUiThread(this::setupCategorySpinner);
+        setupCategorySpinner();
+        Log.d(TAG, "Categories updated: " + categories);
     }
+
+
+    private void setupCategorySpinner() {
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, categories);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        categorySpinner.setAdapter(adapter);
+
+        if (categories.isEmpty()) {
+            categorySpinner.setEnabled(false);
+            // Optionally, you can set a hint or a placeholder text
+            categorySpinner.setPrompt("No categories available");
+        } else {
+            categorySpinner.setEnabled(true);
+        }
+
+        Log.d(TAG, "Category spinner updated with categories: " + categories);
+    }
+
+    private void requestCategoriesFromPhone() {
+        Wearable.getNodeClient(this).getConnectedNodes()
+                .addOnSuccessListener(nodes -> {
+                    for (Node node : nodes) {
+                        Wearable.getMessageClient(this).sendMessage(node.getId(), "/request_categories", new byte[0])
+                                .addOnSuccessListener(messageId -> Log.d(TAG, "Requested categories from phone"))
+                                .addOnFailureListener(e -> Log.e(TAG, "Failed to request categories", e));
+                    }
+                });
+    }
+
+    private void checkPhoneConnection() {
+        Wearable.getNodeClient(this).getConnectedNodes()
+                .addOnSuccessListener(nodes -> {
+                    if (!nodes.isEmpty()) {
+                        for (Node node : nodes) {
+                            Log.d(TAG, "Connected to phone: " + node.getDisplayName() + " (ID: " + node.getId() + ")");
+                        }
+                        requestCategoriesFromPhone();
+                    } else {
+                        Log.w(TAG, "Not connected to phone");
+                    }
+                })
+                .addOnFailureListener(e -> Log.e(TAG, "Failed to get connected nodes", e));
+    }
+
 }

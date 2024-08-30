@@ -6,9 +6,21 @@
     android:padding="16dp">
 
     <Button
-        android:id="@+id/clearDataButton"
+        android:id="@+id/clearAllDataButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Clear All Data" />
+
+    <Button
+        android:id="@+id/clearExpensesButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Clear All Expenses" />
+
+    <Button
+        android:id="@+id/clearCategoriesButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Clear All Categories" />
 
 </LinearLayout>
