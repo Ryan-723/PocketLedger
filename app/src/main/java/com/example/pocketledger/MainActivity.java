@@ -34,6 +34,7 @@ import com.google.android.gms.wearable.Wearable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements DataClient.OnDataChangedListener, ExpenseAdapter.OnExpenseDeleteListener {
@@ -50,6 +51,13 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
     private List<CategoryTotal> categoryTotals = new ArrayList<>();
     private List<String> categories = new ArrayList<>();
 
+    private Spinner monthSpinner;
+    private Spinner yearSpinner;
+    private Button filterButton;
+
+    private static final String[] MONTHS = {"All", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+
+
     private BroadcastReceiver dataClearedReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -64,6 +72,14 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+
+        monthSpinner = findViewById(R.id.monthSpinner);
+        yearSpinner = findViewById(R.id.yearSpinner);
+        filterButton = findViewById(R.id.filterButton);
+
+        expensesRecyclerView = findViewById(R.id.expensesRecyclerView);
+        categoryTotalsRecyclerView = findViewById(R.id.categoryTotalsRecyclerView);
+
         initViews();
         setupRecyclerViews();
         setupAddCategoryButton();
@@ -73,9 +89,76 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
         initializeDefaultCategories();
         checkWearConnection();
 
+
+        setupSpinners();
+        setupFilterButton();
+
         // Register the BroadcastReceiver
         LocalBroadcastManager.getInstance(this).registerReceiver(dataClearedReceiver,
                 new IntentFilter(SettingsActivity.ACTION_DATA_CLEARED));
+    }
+
+    private void setupSpinners() {
+        ArrayAdapter<String> monthAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, MONTHS);
+        monthAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        monthSpinner.setAdapter(monthAdapter);
+
+        List<String> years = getYears();
+        years.add(0, "All");
+        ArrayAdapter<String> yearAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, years);
+        yearAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        yearSpinner.setAdapter(yearAdapter);
+    }
+
+    private List<String> getYears() {
+        int currentYear = Calendar.getInstance().get(Calendar.YEAR);
+        List<String> years = new ArrayList<>();
+        for (int i = currentYear; i >= currentYear - 5; i--) {
+            years.add(String.valueOf(i));
+        }
+        return years;
+    }
+
+    private void setupFilterButton() {
+        filterButton.setOnClickListener(v -> filterExpenses());
+    }
+
+    private void filterExpenses() {
+        String selectedMonth = monthSpinner.getSelectedItem().toString();
+        String selectedYear = yearSpinner.getSelectedItem().toString();
+
+        new Thread(() -> {
+            List<Expense> filteredExpenses;
+            List<CategoryTotal> filteredTotals;
+
+            String monthNumber = getMonthNumber(selectedMonth);
+
+            if (selectedMonth.equals("All") && selectedYear.equals("All")) {
+                filteredExpenses = AppDatabase.getInstance(this).expenseDao().getAllExpenses();
+                filteredTotals = AppDatabase.getInstance(this).expenseDao().getExpenseTotalsByCategory();
+            } else {
+                filteredExpenses = AppDatabase.getInstance(this).expenseDao().getFilteredExpenses(selectedMonth, monthNumber, selectedYear);
+                filteredTotals = AppDatabase.getInstance(this).expenseDao().getFilteredExpenseTotalsByCategory(selectedMonth, monthNumber, selectedYear);
+            }
+
+            runOnUiThread(() -> {
+                expenses.clear();
+                expenses.addAll(filteredExpenses);
+                expenseAdapter.notifyDataSetChanged();
+
+                categoryTotals.clear();
+                categoryTotals.addAll(filteredTotals);
+                categoryTotalAdapter.notifyDataSetChanged();
+            });
+        }).start();
+    }
+
+    private String getMonthNumber(String monthName) {
+        if (monthName.equals("All")) {
+            return "All";
+        }
+        int monthIndex = Arrays.asList(MONTHS).indexOf(monthName);
+        return String.format("%02d", monthIndex); // Convert to two-digit string
     }
 
     @Override
