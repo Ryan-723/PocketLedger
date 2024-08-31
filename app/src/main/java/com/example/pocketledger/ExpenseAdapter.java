@@ -3,6 +3,7 @@ package com.example.pocketledger;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -15,9 +16,15 @@ import java.util.Locale;
 
 public class ExpenseAdapter extends RecyclerView.Adapter<ExpenseAdapter.ViewHolder> {
     private List<Expense> expenses;
+    private OnExpenseDeleteListener deleteListener;
 
-    public ExpenseAdapter(List<Expense> expenses) {
+    public interface OnExpenseDeleteListener {
+        void onExpenseDelete(Expense expense);
+    }
+
+    public ExpenseAdapter(List<Expense> expenses, OnExpenseDeleteListener deleteListener) {
         this.expenses = expenses;
+        this.deleteListener = deleteListener;
     }
 
     @NonNull
@@ -33,6 +40,12 @@ public class ExpenseAdapter extends RecyclerView.Adapter<ExpenseAdapter.ViewHold
         holder.amountTextView.setText(String.format("$%.2f", expense.getAmount()));
         holder.categoryTextView.setText(expense.getCategory());
         holder.dateTextView.setText(new SimpleDateFormat("MM/dd/yyyy HH:mm", Locale.getDefault()).format(new Date(expense.getTimestamp())));
+
+        holder.deleteButton.setOnClickListener(v -> {
+            if (deleteListener != null) {
+                deleteListener.onExpenseDelete(expense);
+            }
+        });
     }
 
     @Override
@@ -44,12 +57,14 @@ public class ExpenseAdapter extends RecyclerView.Adapter<ExpenseAdapter.ViewHold
         TextView amountTextView;
         TextView categoryTextView;
         TextView dateTextView;
+        Button deleteButton;
 
         ViewHolder(View view) {
             super(view);
             amountTextView = view.findViewById(R.id.amountTextView);
             categoryTextView = view.findViewById(R.id.categoryTextView);
             dateTextView = view.findViewById(R.id.dateTextView);
+            deleteButton = view.findViewById(R.id.deleteButton);
         }
     }
 }

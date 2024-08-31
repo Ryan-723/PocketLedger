@@ -1,6 +1,7 @@
 package com.example.pocketledger;
 
 import androidx.room.Dao;
+import androidx.room.Delete;
 import androidx.room.Insert;
 import androidx.room.Query;
 
@@ -19,4 +20,7 @@ public interface ExpenseDao {
 
     @Query("DELETE FROM expenses")
     int deleteAllExpenses();
+
+    @Delete
+    void deleteExpense(Expense expense);
 }

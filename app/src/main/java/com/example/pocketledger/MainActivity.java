@@ -14,6 +14,7 @@ import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -35,7 +36,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity implements DataClient.OnDataChangedListener {
+public class MainActivity extends AppCompatActivity implements DataClient.OnDataChangedListener, ExpenseAdapter.OnExpenseDeleteListener {
 
     private static final String TAG = "MainActivity";
     private RecyclerView expensesRecyclerView;
@@ -99,7 +100,8 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
     }
 
     private void setupRecyclerViews() {
-        expenseAdapter = new ExpenseAdapter(expenses);
+
+        expenseAdapter = new ExpenseAdapter(expenses, this);
         expensesRecyclerView.setAdapter(expenseAdapter);
         expensesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
 
@@ -290,5 +292,40 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
                     }
                 })
                 .addOnFailureListener(e -> Log.e(TAG, "Failed to get connected nodes", e));
+    }
+
+    @Override
+    public void onExpenseDelete(Expense expense) {
+        new AlertDialog.Builder(this)
+                .setTitle("Delete Expense")
+                .setMessage("Are you sure you want to delete this expense?")
+                .setPositiveButton("Delete", (dialog, which) -> deleteExpense(expense))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void deleteExpense(Expense expense) {
+        new Thread(() -> {
+            AppDatabase db = AppDatabase.getInstance(this);
+            db.expenseDao().deleteExpense(expense);
+
+            // Recalculate category totals
+            List<CategoryTotal> updatedTotals = db.expenseDao().getExpenseTotalsByCategory();
+
+            runOnUiThread(() -> {
+                int position = expenses.indexOf(expense);
+                if (position != -1) {
+                    expenses.remove(position);
+                    expenseAdapter.notifyItemRemoved(position);
+
+                    // Update category totals
+                    categoryTotals.clear();
+                    categoryTotals.addAll(updatedTotals);
+                    categoryTotalAdapter.notifyDataSetChanged();
+
+                    Toast.makeText(this, "Expense deleted", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }).start();
     }
 }
