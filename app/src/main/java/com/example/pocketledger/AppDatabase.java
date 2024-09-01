@@ -7,12 +7,13 @@ import androidx.room.RoomDatabase;
 import androidx.room.migration.Migration;
 import androidx.sqlite.db.SupportSQLiteDatabase;
 
-@Database(entities = {Expense.class, Category.class}, version = 5)
+@Database(entities = {Expense.class, Category.class, CategoryLimit.class}, version = 7)
 public abstract class AppDatabase extends RoomDatabase {
     private static final String TAG = "AppDatabase";
 
     public abstract ExpenseDao expenseDao();
     public abstract CategoryDao categoryDao();
+    public abstract CategoryLimitDao categoryLimitDao();
 
     private static AppDatabase instance;
 

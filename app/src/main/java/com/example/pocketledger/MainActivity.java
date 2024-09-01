@@ -1,9 +1,16 @@
 package com.example.pocketledger;
 
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
@@ -14,8 +21,10 @@ import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -36,10 +45,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
+import android.Manifest;
+
 
 public class MainActivity extends AppCompatActivity implements DataClient.OnDataChangedListener, ExpenseAdapter.OnExpenseDeleteListener {
 
     private static final String TAG = "MainActivity";
+    private static final int JOB_ID = 1000;
     private RecyclerView expensesRecyclerView;
     private RecyclerView categoryTotalsRecyclerView;
     private Button addCategoryButton;
@@ -54,6 +66,7 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
     private Spinner monthSpinner;
     private Spinner yearSpinner;
     private Button filterButton;
+    private Button setCategoryLimitsButton;
 
     private static final String[] MONTHS = {"All", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
 
@@ -88,14 +101,76 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
         setupCategorySpinner();
         initializeDefaultCategories();
         checkWearConnection();
+//        scheduleExpenseLimitCheck();
 
+        createNotificationChannel();
+        requestNotificationPermission();
 
         setupSpinners();
         setupFilterButton();
 
+        setCategoryLimitsButton = findViewById(R.id.setCategoryLimitsButton);
+        setCategoryLimitsButton.setOnClickListener(v -> openCategoryLimitsActivity());
+
         // Register the BroadcastReceiver
         LocalBroadcastManager.getInstance(this).registerReceiver(dataClearedReceiver,
                 new IntentFilter(SettingsActivity.ACTION_DATA_CLEARED));
+    }
+
+    private static final int REQUEST_NOTIFICATION_PERMISSION = 1;
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_NOTIFICATION_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "Notification permission granted");
+            } else {
+                Log.e(TAG, "Notification permission denied");
+                // Consider informing the user that they won't receive notifications
+            }
+        }
+    }
+
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATION_PERMISSION);
+            }
+        }
+    }
+    private void openCategoryLimitsActivity() {
+        Intent intent = new Intent(this, CategoryLimitActivity.class);
+        startActivity(intent);
+    }
+
+//    private void scheduleExpenseLimitCheck() {
+//        ComponentName componentName = new ComponentName(this, ExpenseLimitCheckService.class);
+//        JobInfo.Builder builder = new JobInfo.Builder(JOB_ID, componentName)
+//                .setPeriodic(15 * 60 * 1000) // 15 minutes in milliseconds
+//                .setPersisted(true); // Job persists across reboots
+//
+//        JobScheduler jobScheduler = (JobScheduler) getSystemService(Context.JOB_SCHEDULER_SERVICE);
+//        int resultCode = jobScheduler.schedule(builder.build());
+//        if (resultCode == JobScheduler.RESULT_SUCCESS) {
+//            Log.d(TAG, "Job scheduled successfully!");
+//        } else {
+//            Log.d(TAG, "Job scheduling failed");
+//        }
+//    }
+
+    private void createNotificationChannel() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    "expense_limit_channel",
+                    "Expense Limit Notifications",
+                    NotificationManager.IMPORTANCE_DEFAULT
+            );
+            channel.setDescription("Notifications for when you approach expense limits");
+
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
+        }
     }
 
     private void setupSpinners() {
@@ -336,15 +411,34 @@ public class MainActivity extends AppCompatActivity implements DataClient.OnData
     private void processExpense(double amount, String category, long timestamp) {
         Expense expense = new Expense(amount, category, timestamp);
         new Thread(() -> {
-            AppDatabase.getInstance(this).expenseDao().insertExpense(expense);
+            AppDatabase db = AppDatabase.getInstance(this);
+            long id = db.expenseDao().insertExpense(expense);
+            expense.setId((int) id);
+            double categoryTotal = db.expenseDao().getCategoryTotal(category);
+            CategoryLimit limit = db.categoryLimitDao().getCategoryLimit(category);
+
             runOnUiThread(() -> {
                 expenses.add(0, expense);
                 expenseAdapter.notifyItemInserted(0);
                 expensesRecyclerView.scrollToPosition(0);
                 loadCategoryTotals();
                 Log.d(TAG, "Expense processed and added to the list: " + expense);
+
+                if (limit != null) {
+                    checkAndNotifyLimit(category, categoryTotal, limit.getLimitAmount());
+                }
             });
         }).start();
+    }
+
+    private void checkAndNotifyLimit(String category, double total, double limit) {
+        if (total >= limit * 0.9) {  // Notify at 90% of the limit
+            Intent intent = new Intent(this, ExpenseLimitReceiver.class);
+            intent.putExtra("category", category);
+            intent.putExtra("total", total);
+            intent.putExtra("limit", limit);
+            sendBroadcast(intent);
+        }
     }
 
     @Override

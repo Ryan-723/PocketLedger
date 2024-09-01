@@ -13,7 +13,10 @@ public interface ExpenseDao {
     List<Expense> getAllExpenses();
 
     @Insert
-    void insertExpense(Expense expense);
+    long insertExpense(Expense expense);
+
+    @Query("SELECT SUM(amount) FROM expenses WHERE category = :category")
+    double getCategoryTotal(String category);
 
     @Query("SELECT category, SUM(amount) as total FROM expenses GROUP BY category ORDER BY total DESC")
     List<CategoryTotal> getExpenseTotalsByCategory();

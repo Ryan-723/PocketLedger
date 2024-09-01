@@ -12,6 +12,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.PutDataMapRequest;
 import com.google.android.gms.wearable.PutDataRequest;
 import com.google.android.gms.wearable.Wearable;
@@ -54,12 +55,18 @@ public class SettingsActivity extends AppCompatActivity {
                 AppDatabase db = AppDatabase.getInstance(this);
                 int expensesDeleted = db.expenseDao().deleteAllExpenses();
                 int categoriesDeleted = db.categoryDao().deleteAllCategories();
+                int limitsDeleted = db.categoryLimitDao().deleteAllCategoryLimits();
 
                 Log.d(TAG, "Expenses deleted: " + expensesDeleted);
                 Log.d(TAG, "Categories deleted: " + categoriesDeleted);
+                Log.d(TAG, "Category limits deleted: " + limitsDeleted);
+
+                sendEmptyCategoryListToWear();
 
                 runOnUiThread(() -> {
-                    Toast.makeText(this, "All data cleared. Expenses: " + expensesDeleted + ", Categories: " + categoriesDeleted, Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "All data cleared. Expenses: " + expensesDeleted +
+                            ", Categories: " + categoriesDeleted +
+                            ", Limits: " + limitsDeleted, Toast.LENGTH_LONG).show();
                     notifyDataCleared();
                 });
             } catch (Exception e) {
@@ -91,11 +98,14 @@ public class SettingsActivity extends AppCompatActivity {
             try {
                 AppDatabase db = AppDatabase.getInstance(this);
                 int categoriesDeleted = db.categoryDao().deleteAllCategories();
+                int limitsDeleted = db.categoryLimitDao().deleteAllCategoryLimits();
 
                 Log.d(TAG, "Categories deleted: " + categoriesDeleted);
+                Log.d(TAG, "Category limits deleted: " + limitsDeleted);
 
                 runOnUiThread(() -> {
-                    Toast.makeText(this, "All categories cleared: " + categoriesDeleted, Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "All categories cleared: " + categoriesDeleted +
+                            ", Limits: " + limitsDeleted, Toast.LENGTH_LONG).show();
                     notifyDataCleared();
                     sendEmptyCategoryListToWear();
                 });
@@ -120,6 +130,16 @@ public class SettingsActivity extends AppCompatActivity {
         putDataTask.addOnFailureListener(exception -> {
             Log.e(TAG, "Sending empty category list to Wear failed: " + exception);
         });
+
+        // Send a message to the wearable app to clear its local storage
+        Wearable.getNodeClient(this).getConnectedNodes()
+                .addOnSuccessListener(nodes -> {
+                    for (Node node : nodes) {
+                        Wearable.getMessageClient(this).sendMessage(node.getId(), "/clear_categories", new byte[0])
+                                .addOnSuccessListener(messageId -> Log.d(TAG, "Sent clear categories message to " + node.getDisplayName()))
+                                .addOnFailureListener(e -> Log.e(TAG, "Failed to send clear categories message", e));
+                    }
+                });
     }
 
     private void handleClearDataError(Exception e) {

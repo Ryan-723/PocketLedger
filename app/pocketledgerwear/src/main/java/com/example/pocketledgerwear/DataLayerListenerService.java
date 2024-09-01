@@ -8,6 +8,7 @@ import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
 import com.google.android.gms.wearable.DataItem;
 import com.google.android.gms.wearable.DataMapItem;
+import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.WearableListenerService;
 
 import java.util.Arrays;
@@ -50,6 +51,26 @@ public class DataLayerListenerService extends WearableListenerService {
 
         // Send a broadcast to notify the app about the category update
         Intent updateIntent = new Intent("com.example.budgetpulsewear.UPDATE_CATEGORIES");
+        sendBroadcast(updateIntent);
+        Log.d(TAG, "Broadcast sent to update categories");
+    }
+
+    @Override
+    public void onMessageReceived(MessageEvent messageEvent) {
+        if (messageEvent.getPath().equals("/clear_categories")) {
+            clearLocalCategories();
+        }
+    }
+
+    private void clearLocalCategories() {
+        SharedPreferences prefs = getSharedPreferences("CategoryPrefs", MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.remove("categories");
+        boolean success = editor.commit();
+        Log.d(TAG, "Local categories cleared: " + success);
+
+        // Send a broadcast to notify the app about the category update
+        Intent updateIntent = new Intent("com.example.pocketledgerwear.UPDATE_CATEGORIES");
         sendBroadcast(updateIntent);
         Log.d(TAG, "Broadcast sent to update categories");
     }

@@ -1,5 +1,10 @@
 package com.example.pocketledgerwear;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.ArrayAdapter;
@@ -9,6 +14,7 @@ import android.widget.Spinner;
 import android.widget.Toast;
 
 import androidx.fragment.app.FragmentActivity;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.wearable.DataClient;
@@ -23,7 +29,9 @@ import com.google.android.gms.wearable.Wearable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class MainActivity extends FragmentActivity implements DataClient.OnDataChangedListener {
 
@@ -38,6 +46,9 @@ public class MainActivity extends FragmentActivity implements DataClient.OnDataC
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        IntentFilter filter = new IntentFilter("com.example.pocketledgerwear.UPDATE_CATEGORIES");
+        LocalBroadcastManager.getInstance(this).registerReceiver(updateReceiver, filter);
+
         amountInput = findViewById(R.id.amountInput);
         categorySpinner = findViewById(R.id.categorySpinner);
         saveButton = findViewById(R.id.saveButton);
@@ -47,6 +58,15 @@ public class MainActivity extends FragmentActivity implements DataClient.OnDataC
         requestCategoriesFromPhone();
         checkPhoneConnection();
     }
+
+    private BroadcastReceiver updateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if ("com.example.pocketledgerwear.UPDATE_CATEGORIES".equals(intent.getAction())) {
+                loadCategories();
+            }
+        }
+    };
 
     @Override
     protected void onResume() {
@@ -58,6 +78,20 @@ public class MainActivity extends FragmentActivity implements DataClient.OnDataC
     protected void onPause() {
         super.onPause();
         Wearable.getDataClient(this).removeListener(this);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(updateReceiver);
+    }
+
+    private void loadCategories() {
+        SharedPreferences prefs = getSharedPreferences("CategoryPrefs", MODE_PRIVATE);
+        Set<String> categoriesSet = prefs.getStringSet("categories", new HashSet<>());
+        categories.clear();
+        categories.addAll(categoriesSet);
+        setupCategorySpinner();
     }
 
 
